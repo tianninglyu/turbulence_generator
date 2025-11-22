@@ -100,7 +100,7 @@ class TurbGenEx : public TurbGen
 	using TurbGen::init_driving;
 
 	TurbGenEx()
-        : TurbGen(amrex::ParallelDescriptor::IOProcessorNumber()) {}
+        : TurbGen(amrex::ParallelDescriptor::MyProc()) {}
 
 	int init_driving(std::string parameter_file, const double time) override
 	{
