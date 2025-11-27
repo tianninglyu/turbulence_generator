@@ -56,6 +56,7 @@ BibTeX:
   archivePrefix = {arXiv},
   primaryClass = {astro-ph.SR}
 }
+```
 
 ### Copyright notes ###
 
