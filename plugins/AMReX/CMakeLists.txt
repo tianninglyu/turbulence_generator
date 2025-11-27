@@ -10,6 +10,12 @@ target_sources(turbulence INTERFACE
 
 target_link_libraries(turbulence INTERFACE amrex)
 
-target_include_directories(turbulence INTERFACE
+if(CMAKE_SOURCE_DIR STREQUAL CMAKE_CURRENT_SOURCE_DIR)
+    set(TURB_INCLUDE_TYPE INTERFACE)
+else()
+    set(TURB_INCLUDE_TYPE SYSTEM INTERFACE)
+endif()
+
+target_include_directories(turbulence ${TURB_INCLUDE_TYPE}
     $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}>
 )
