@@ -22,16 +22,19 @@ Directory 'python' contains a python frontend, which calls TurbGen to generate s
 * Make your own modifications, commit, push, etc.
 * If you want (some of) your own changes to go into this main repo, please create a pull request.
 
-### Copyright notes ###
+### Main contact ###
+
+* Christoph Federrath (christoph.federrath@anu.edu.au)
 
 ## Citation
 
 If you use TurbGen for scientific work, please cite the following paper:
 
 **Federrath et al. (2010), A&A 512, A81**  
-“Comparing the statistics of interstellar turbulence in simulations and observations:  
-Solenoidal versus compressive turbulence forcing”
+"“"Comparing the statistics of interstellar turbulence in simulations and observations: Solenoidal versus compressive turbulence forcing"
+
 DOI: https://doi.org/10.1051/0004-6361/200912437
+
 ADS: https://ui.adsabs.harvard.edu/abs/2010A%26A...512A..81F
 
 BibTeX:
@@ -52,7 +55,3 @@ BibTeX:
   archivePrefix = {arXiv},
   primaryClass = {astro-ph.SR}
 }
-
-### Main contact ###
-
-* Christoph Federrath (christoph.federrath@anu.edu.au)
