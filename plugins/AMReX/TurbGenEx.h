@@ -102,9 +102,9 @@ class TurbGenEx : public TurbGen
 	TurbGenEx()
         : TurbGen(amrex::ParallelDescriptor::MyProc()) {}
 
-	int init_driving(std::string parameter_file, const double time) override
+   int init_driving(const std::unordered_map<std::string, std::string> &params) override
 	{
-		TurbGen::init_driving(parameter_file, time);
+		TurbGen::init_driving(params);
 		initial_sync_to_gpu();
 		return 0;
 	}

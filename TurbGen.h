@@ -30,6 +30,9 @@
 #include <iterator>
 #include <sstream>
 #include <fstream>
+#include <stdexcept>
+#include <type_traits>
+#include <unordered_map>
 #include <vector>
 #include <algorithm>
 #include <string>
@@ -222,10 +225,16 @@ class TurbGen
     }; // init_single_realisation
 
     // ******************************************************
-    public: int init_driving(std::string parameter_file) {
+    public: virtual int init_driving(std::string parameter_file) {
         return init_driving(parameter_file, 0.0); // call with time = 0.0
     }; // init_driving (overloaded)
     // ******************************************************
+
+    public: virtual int init_driving(const std::unordered_map<std::string, std::string> &params) {
+        return init_driving(params, 0.0); // call with time = 0.0
+    }; // init_driving (overloaded)
+    // ******************************************************
+
     public: virtual int init_driving(std::string parameter_file, const double time) {
         // ******************************************************
         // Initialise the turbulence generator and all relevant internal data structures by reading from 'parameter_file'.
@@ -317,6 +326,100 @@ class TurbGen
         if (verbose > 1) TurbGen_printf(FuncSig(__func__)+"exiting.\n");
         return 0;
     }; // init_driving
+
+    public:
+    virtual int init_driving(const std::unordered_map<std::string, std::string> &params, const double &time) {
+       // ******************************************************
+       // Initialize turbulence generator using parameters supplied through an unordered map
+       // These parameters are used to drive the turbulence.
+       // Supported map keys are as follows:
+       //
+       // ndim:                            Number of spatial dimensions (1, 1.5, 2, 2.5 or 3)
+       // ampl_factor:                     Automatic amplitude adjustment factor. Can be one number
+       //                                  or comma sepatated list of numbers
+       // length:                          Length of domain box. Can be one number or comma
+       //                                  separated list of numbers
+       // target_vdisp:                    Target turbulent velocity dispersion
+       // ampl_auto_adjust:                Automatic amplitude adjustment switch
+       // k_driv:                          Driving wavenumber in units of 2pi/L; Sets t_decay
+       // k_min:                           Min wavenumber in units of 2pi/L
+       // k_max:                           Max wavenumber in units of 2pi/L
+       // sol_weight:                      Solenoidal weight
+       // spect_form:                      Spectral form
+       // power_law_exp:                   Power-law exponent (if spectral form = 2)
+       // angles_exp:                      Angles sampling exponent if (spectral form = 2)
+       // random_seed:                     Random seed value
+       // nsteps_per_t_turb:               Number of pattern updates per t_decay
+       //
+       // Other variables used are the same as the above overload of init_driving
+       // ******************************************************
+
+       if (verbose > 1) TurbGen_printf(FuncSig(__func__)+"entering.\n");
+
+       double k_driv, k_min, k_max;
+       const double ampl_coeff = 0.15;
+
+       set_param<double>(params, "ndim", ndim);
+       set_number_of_components();
+
+       set_param<double [3]>(params, "ampl_factor", ampl_factor);
+       set_param<double [3]>(params, "length", L);
+       set_param<double>(params, "target_vdisp", velocity);
+       set_param<double>(params, "k_driv", k_driv);
+       set_param<double>(params, "k_min", k_min);
+       set_param<double>(params, "k_max", k_max);
+       set_param<double>(params, "sol_weight", sol_weight);
+       set_param<int>(params, "ampl_auto_adjust", ampl_auto_adjust);
+       set_param<int>(params, "spect_form", spect_form);
+       set_param<int>(params, "random_seed", random_seed);
+       set_param<int>(params, "nsteps_per_t_turb", nsteps_per_t_turb);
+       if (spect_form == 2) {
+         set_param<double>(params, "power_law_exp", power_law_exp);
+         set_param<double>(params, "angles_exp", angles_exp);
+       }
+
+       power_law_exp_2 = power_law_exp;
+       kmin = (k_min - DBL_EPSILON) * 2 * M_PI / L[X];
+       kmax = (k_max + DBL_EPSILON) * 2 * M_PI / L[X];
+       kmid = kmax;
+       t_decay = L[X] / k_driv / velocity;
+       dt = t_decay / nsteps_per_t_turb;
+       step = -1;
+       seed = random_seed;
+       energy = pow(ampl_coeff * velocity, 3.0) / L[X];
+       OUvar = sqrt(energy / t_decay);
+
+       // Read ampl_factor from evoluton file on restart if amplitude auto adjust is enabled
+       if (ampl_auto_adjust && (time > 0.0))
+          if (!read_ampl_factor_from_evol_file(time)) return -1;
+
+       // User defined amplification factor raised to 1.5th power to easily adjust it as a pure factor
+       for (double &amp : ampl_factor) amp = pow(amp, 1.5);
+       set_solenoidal_weight_normalisation(); // Set solenoidal weight normalization
+       init_modes(); // Initialize modes
+       OU_noise_init(); // Initialise Ornstein-Uhlenbeck sequence
+       get_decomposition_coeffs(); // Calculate solenoidal and compressive coefficients (aka, akb) from OUphases
+
+       if (verbose) {
+          print_info("driving");
+          TurbGen_printf("Writing time evolution information to file '%s'.\n", evolfile.c_str());
+       }
+
+       if (PE == 0) {
+          std::ofstream ofs(evolfile.c_str(), std::ios::app);
+          ofs << std::setw(24) << "#01_time" << std::setw(24) << "#02_time_in_t_turb"
+              << std::setw(24) << "#03_ampl_factor_x" << std::setw(24) << "#04_ampl_factor_y" << std::setw(24) << "#05_ampl_factor_z"
+              << std::setw(24) << "#06_v_turb_prev_x" << std::setw(24) << "#07_v_turb_prev_y" << std::setw(24) << "#08_v_turb_prev_z"
+              << std::endl;
+          ofs.close();
+          ofs.clear();
+       }
+
+       if (verbose) TurbGen_printf("===============================================================================\n");
+       if (verbose > 1) TurbGen_printf(FuncSig(__func__)+"exiting.\n");
+
+       return 0;
+    }
 
     // ******************************************************
     public: bool check_for_update(const double time) {
@@ -1046,6 +1149,118 @@ class TurbGen
         return ret;
     }; // ran2
 
+    protected: void split(const std::string &line, double vals[3], char delimiter, const std::string &param) {
+       // ******************************************************
+       // Split string into array of doubles depending on delimiter
+       // ******************************************************
+
+       std::stringstream ss(line);
+       std::string token;
+       double val;
+       std::vector<double> buffer;
+       int param_len;
+
+       try {
+         while (std::getline(ss, token, delimiter)) { // Split string and store in array
+            val = parse_param<double>(token,  param);
+            buffer.push_back(val);
+         }
+       }
+       catch (std::exception &e) { // Raise exception if unable to parse input
+          if (PE == 0) {
+             std::cerr << "Unable to parse " << param << std::endl;
+             exit(1);
+          }
+       }
+
+       param_len = static_cast<int>(buffer.size());
+       if (param_len != ncmp && param_len != 1) { // Raise exception if incorrect number of parameters specified
+          if (PE == 0) {
+             std::cerr << "Invalid number of parameters specified for " << param << ": " << param_len << std::endl;
+          }
+          exit(1);
+       }
+
+       // Set supplied array
+       for (int i=0; i<ncmp; i++) vals[i] = param_len == 1 ? buffer[0] : buffer[i];
+
+    }
+
+    protected:
+    template<typename T>
+    T parse_param(const std::string &num, const std::string &param) {
+       // ******************************************************
+       // Templated function to parse integer and double parameter
+       // ******************************************************
+
+       T val;
+       std::string type = "integer or double";
+
+       try {
+          if constexpr (std::is_same_v<T, int>) {
+            val = std::stoi(num); // Convert string to integer
+            type = "integer";
+          }
+          else if constexpr (std::is_same_v<T, double>) {
+            val = std::stod(num); // Convert string to double
+            type = "double";
+          }
+          else {
+             if (PE == 0) { // Raise exception if type is not double or int
+               std::cerr << "Invalid template instantiation: Type not supported" << std::endl;
+             }
+             exit(1);
+          }
+       }
+      catch (std::invalid_argument &e) {
+         if (PE == 0) { // Raise exception if input doesn't start with int or double
+            std::cerr << param << " must be an " << type << std::endl;
+         }
+         exit(1);
+      }
+      catch (std::out_of_range &e) {
+         if (PE == 0) { // Raise exception if input is out of allocatable memory range
+            std::cerr << param << " is out of " << type << " range" << std::endl;
+         }
+         exit(1);
+      }
+
+      return val;
+    }
+
+    protected: std::string read_from_map(const std::unordered_map<std::string, std::string> &params, const std::string &param) {
+       // ******************************************************
+       // Read parameters form the supplied hash map in the form of strings
+       // ******************************************************
+
+       std::string val;
+       try {
+          val = params.at(param);
+       }
+       catch (std::out_of_range &e) {
+         if (PE == 0) { // Raise exception if an invalid map key is entered
+            std::cerr << "Parameter not found: " << param << std::endl;
+         }
+         exit(1);
+       }
+
+       return val;
+    };
+
+    protected:
+    template<typename T>
+    void set_param(const std::unordered_map<std::string, std::string> &params, const std::string &param, T &var) {
+       // ******************************************************
+       // Templated function to parse parameters depending on data type
+       // ******************************************************
+
+      if constexpr (std::is_same_v<T, double[3]>)
+         split(read_from_map(params, param), var, ',', param); // Read double array
+      else if constexpr (std::is_same_v<T, double>)
+         var = parse_param<double>(read_from_map(params, param), param); // Read double
+      else if constexpr (std::is_same_v<T, int>)
+         var = parse_param<int>(read_from_map(params, param), param); // Read integer
+   }
 
     // ******************************************************
     protected: void TurbGen_printf(std::string format, ...) {
