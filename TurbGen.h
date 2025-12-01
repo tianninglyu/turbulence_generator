@@ -1178,22 +1178,10 @@ class TurbGen
             val = std::stod(num); // Convert string to double
             type = "double";
           }
-          else {
-             if (PE == 0) { // Raise exception if type is not double or int
-               std::cerr << "Invalid template instantiation: Type not supported" << std::endl;
-             }
-             exit(1);
-          }
        }
       catch (std::invalid_argument &e) {
          if (PE == 0) { // Raise exception if input doesn't start with int or double
             std::cerr << param << " must be an " << type << std::endl;
-         }
-         exit(1);
-      }
-      catch (std::out_of_range &e) {
-         if (PE == 0) { // Raise exception if input is out of allocatable memory range
-            std::cerr << param << " is out of " << type << " range" << std::endl;
          }
          exit(1);
       }
