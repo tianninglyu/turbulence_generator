@@ -107,6 +107,7 @@ class TurbGenEx : public TurbGen
 	{
 		TurbGen::init_driving(params);
 		initial_sync_to_gpu();
+		sync_to_gpu();
 		return 0;
 	}
 
